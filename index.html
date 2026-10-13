@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module 05.2 - Role Prompting & Iterative Refinement</title>
+    <style>
+        /* ======================================================= */
+        /* CORE STYLES (Light Blue Theme)                          */
+        /* ======================================================= */
+        :root { 
+            --bg-color: #e0f2fe; /* Light Blue Background */
+            --primary: #0284c7; /* Darker Blue for primary elements */
+            --accent: #e11d48; /* Rose for accents */
+            --whatsapp: #16a34a; /* Green for success/formats */
+            --text-main: #0f172a; /* Dark slate for main text */
+            --text-muted: #475569; /* Slate for muted text */
+            --panel-bg: rgba(255, 255, 255, 0.9); /* White panels */
+            --gold: #d97706; /* Amber for context */
+            --cyan: #0891b2; /* Cyan for tags */
+            --purple: #7e22ce; /* Purple for role prompting */
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; user-select: none; }
+        html { font-size: 16px; } 
+        @media (min-width: 1920px) { html { font-size: 20px; } } 
+        @media (min-width: 2560px) { html { font-size: 26px; } } 
+        @media (min-width: 3800px) { html { font-size: 36px; } }
+        
+        body { background-color: var(--bg-color); color: var(--text-main); overflow: hidden; width: 100vw; height: 100vh; background-image: radial-gradient(circle at center, #bae6fd 0%, #e0f2fe 100%); }
+        #presentation { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+        .slide { position: absolute; width: 92%; max-width: 1600px; height: 86%; opacity: 0; transform: scale(0.95) translateY(20px); transition: all 0.8s cubic-bezier(0.25, 1, 0.5, 1); display: flex; flex-direction: column; justify-content: center; pointer-events: none; overflow-y: auto; scrollbar-width: none; }
+        .slide::-webkit-scrollbar { display: none; } 
+        .slide.active { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; }
+        
+        h1 { font-size: 3.5rem; color: var(--primary); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px rgba(2, 132, 199, 0.2); font-weight: 800;}
+        h2 { font-size: 2rem; margin-bottom: 25px; color: var(--text-muted); font-weight: 600;} 
+        p, li { font-size: 1.5rem; line-height: 1.8; color: var(--text-muted); margin-bottom: 15px; }
+        .module-tag { display:inline-block; border: 1px solid var(--cyan); padding: 4px 18px; border-radius: 20px; font-weight: bold; letter-spacing: 1px; margin-bottom: 10px; font-size: 0.9rem; align-self: flex-start; background: rgba(8, 145, 178, 0.1); color: var(--cyan);}
+
+        .landscape-box { position: relative; width: 100%; height: 48vh; min-height: 380px; max-height: 600px; background: var(--panel-bg); border-radius: 15px; border: 1px solid #cbd5e1; margin-top: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: visible; flex-shrink: 0; }
+        .desc-box { margin-top: 20px; background: rgba(255, 255, 255, 0.9); border-left: 5px solid var(--primary); padding: 15px 25px; border-radius: 8px; height: auto; font-size: 1.3rem; line-height: 1.6; color: var(--text-main); opacity: 0; transition: opacity 0.5s; z-index: 50; position: relative; overflow: visible; display: block; box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-weight: 500;}
+        
+        /* Slide 1: Role Prompting - Context Zones */
+        .context-split { display: flex; width: 100%; height: 100%; justify-content: space-around; align-items: center; position: relative; padding: 15px 0; }
+        .context-zone { width: 45%; height: auto; min-height: 85%; background: rgba(241, 245, 249, 0.8); border: 2px dashed #94a3b8; border-radius: 15px; display: flex; flex-direction: column; align-items: center; padding: 20px; position: relative; transition: all 0.5s; overflow: hidden; }
+        .context-zone.active-zone { border-style: solid; box-shadow: 0 10px 20px rgba(0,0,0,0.05); background: white;}
+        .cz-weak.active-zone { border-color: var(--text-muted); }
+        .cz-strong.active-zone { border-color: var(--purple); box-shadow: 0 10px 20px rgba(126, 34, 206, 0.1); }
+        .cz-title { font-size: 1.5rem; font-weight: bold; margin-bottom: 20px; padding: 8px 20px; border-radius: 20px; z-index: 10; }
+        .cz-weak .cz-title { background: rgba(148, 163, 184, 0.1); color: var(--text-muted); border: 1px solid var(--text-muted); }
+        .cz-strong .cz-title { background: rgba(126, 34, 206, 0.1); color: var(--purple); border: 1px solid var(--purple); }
+        
+        .chat-ui { width: 100%; display: flex; flex-direction: column; gap: 15px; z-index: 10; }
+        .chat-msg { padding: 15px 20px; border-radius: 12px; font-size: 1.15rem; max-width: 90%; opacity: 0; transform: translateY(10px); transition: all 0.5s; line-height: 1.5; margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);}
+        .chat-msg.show { opacity: 1; transform: translateY(0); }
+        .msg-user { background: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .msg-ai { background: rgba(2, 132, 199, 0.05); color: var(--text-main); align-self: flex-start; border: 1px solid rgba(2, 132, 199, 0.2); border-bottom-left-radius: 2px; }
+        .msg-ai.role-resp { border-color: var(--purple); background: rgba(126, 34, 206, 0.05); color: #581c87; font-family: 'Courier New', Courier, monospace; font-weight: bold;}
+        
+        .typing-indicator { display: flex; gap: 4px; padding: 8px 12px; background: rgba(0,0,0,0.05); border-radius: 12px; width: fit-content; align-self: flex-start; opacity: 0; transition: opacity 0.3s; }
+        .typing-indicator.show { opacity: 1; }
+        .t-dot { width: 8px; height: 8px; background: var(--primary); border-radius: 50%; animation: typeBounce 1.4s infinite ease-in-out both; }
+        .t-dot:nth-child(1) { animation-delay: -0.32s; } .t-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typeBounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+        /* Slide 2: Few Shot Format */
+        .fmt-container { width: 90%; height: 350px; display: flex; justify-content: space-between; align-items: center; position: relative; margin: 0 auto; }
+        .fmt-box { width: 30%; height: 100%; background: white; border: 2px dashed #94a3b8; border-radius: 10px; padding: 20px; font-size: 1.1rem; color: var(--text-main); display: flex; flex-direction: column; justify-content: center; line-height: 1.6; opacity: 0; transition: all 0.5s; box-shadow: 0 10px 25px rgba(0,0,0,0.05); position: relative; }
+        .fmt-box.show { opacity: 1; transform: translateY(0); border-style: solid; }
+        .fmt-box-zero.show { border-color: var(--accent); }
+        .fmt-box-few.show { border-color: var(--whatsapp); background: rgba(22, 163, 74, 0.02); }
+        .fmt-examples { position: absolute; left: 50%; top: -30px; transform: translateX(-50%); width: 140%; background: white; border: 2px solid var(--gold); border-radius: 12px; padding: 15px; color: var(--text-main); font-family: monospace; font-size: 1rem; box-shadow: 0 10px 30px rgba(217, 119, 6, 0.1); opacity: 0; transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 20; text-align: left; }
+        .fmt-examples.show { opacity: 1; top: 10%; }
+        .code-hl { color: var(--whatsapp); font-weight: bold; }
+        
+        /* Slide 3: Iterative Refinement */
+        .iterative-chat { width: 80%; height: 90%; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding: 20px 10px; }
+        .iter-badge { background: white; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 20px; font-size: 0.9rem; align-self: center; color: var(--text-muted); opacity: 0; transition: opacity 0.4s; font-weight: bold;}
+        .iter-badge.show { opacity: 1; }
+
+        /* Slide 4: Pillars */
+        .prompt-pillar-container { display: flex; justify-content: space-around; align-items: flex-end; height: 100%; width: 80%; margin: 0 auto; padding-bottom: 30px; }
+        .p-pillar { 
+    width: 28%; 
+    background: white; 
+    border: 2px dashed #94a3b8; 
+    border-radius: 12px; 
+    
+    /* Height badalayisalagide */
+    height: auto; 
+    min-height: 260px; 
+    
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: flex-start; 
+    padding: 20px; 
+    opacity: 0; 
+    transform: translateY(30px); 
+    transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+    position: relative; 
+}
+        .p-pillar.show { opacity: 1; transform: translateY(0); border-style: solid; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .p-icon { font-size: 4rem; margin-bottom: 15px; } /* Increased icon size */
+        .p-title { font-size: 1.4rem; font-weight: bold; color: var(--text-main); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; } /* Increased title size */
+        .p-desc { font-size: 1.1rem; color: var(--text-muted); text-align: center; line-height: 1.5; } /* Increased desc size */
+        
+        #pillar-role.show { border-color: var(--purple); background: rgba(126, 34, 206, 0.05); }
+        #pillar-shot.show { border-color: var(--gold); background: rgba(217, 119, 6, 0.05); }
+        #pillar-iter.show { border-color: var(--cyan); background: rgba(8, 145, 178, 0.05); }
+
+        /* RESPONSIVE SETTINGS */
+        @media (max-width: 950px) {
+            .comparison-layout { flex-direction: column; gap: 15px; margin-top: 10px; }
+            .landscape-box { min-height: 300px; height: 350px; }
+            .desc-box { font-size: 1.05rem; padding: 12px; }
+            .context-split { flex-direction: column; gap: 10px; }
+            .context-zone { width: 95%; height: auto; padding: 10px; }
+            .chat-msg { font-size: 0.85rem; padding: 8px 12px; gap: 5px; margin-bottom: 2px; }
+            .fmt-container { flex-direction: column; height: 100%; gap: 15px; }
+            .fmt-box { width: 90%; height: auto; padding: 10px; }
+            .fmt-examples { width: 95%; position: relative; left: 0; transform: none; top: 0 !important; margin: 10px 0; }
+            .iterative-chat { width: 100%; }
+            .p-pillar { padding: 10px; height: 180px; width: 30%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="presentation" onclick="nextSlide()">
+        
+        <!-- SLIDE 0: TITLE SLIDE -->
+        <section class="slide active" id="slide-0" style="align-items: center; text-align: center; justify-content: center;">
+            <div style="max-width: 1000px; width: 100%;">
+                <h2 style="color: var(--accent); font-size: 1.5rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px;">Foundation Diploma in ICT</h2>
+                <h1 style="font-size: 4rem; margin-bottom: 5px; color: var(--primary);">Module 05</h1>
+                <p style="font-size: 2.2rem; color: var(--text-main); font-weight: bold; margin-bottom: 25px;">Prompt Engineering & Working with AI</p>
+
+                <div id="module-list" style="background: white; border: 1px solid #cbd5e1; border-radius: 15px; padding: 20px 25px; text-align: left; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+                    <ul style="list-style: none; padding: 0; margin: 0;">
+                        <li style="font-size: 1.3rem; margin-bottom: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 15px;"><span style="background: #e2e8f0; color: var(--text-muted); padding: 3px 10px; border-radius: 8px; font-weight: bold; font-size: 1.1rem;">5.1</span> Prompt anatomy: task, context, constraints and output format</li>
+                        
+                        <!-- HIGHLIGHTED 5.2 -->
+                        <li style="font-size: 1.4rem; margin-bottom: 10px; color: var(--text-main); display: flex; align-items: center; gap: 15px; background: rgba(126, 34, 206, 0.05); padding: 10px; border-radius: 8px; border: 1px solid var(--purple);"><span style="background: var(--purple); color: white; padding: 3px 10px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; box-shadow: 0 0 10px rgba(126, 34, 206, 0.2);">5.2</span> <b style="color:var(--text-main);">Role prompting, examples and iterative refinement</b></li>
+                        
+                        <li style="font-size: 1.3rem; margin-bottom: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 15px;"><span style="background: #e2e8f0; color: var(--text-muted); padding: 3px 10px; border-radius: 8px; font-weight: bold; font-size: 1.1rem;">5.3</span> Comparing weak vs strong prompts</li>
+                        <li style="font-size: 1.3rem; margin-bottom: 0; color: var(--text-muted); display: flex; align-items: center; gap: 15px;"><span style="background: #e2e8f0; color: var(--text-muted); padding: 3px 10px; border-radius: 8px; font-weight: bold; font-size: 1.1rem;">5.4</span> Prompt libraries, verification and safe data handling</li>
+                    </ul>
+                </div>
+
+                <div id="profile-box" style="display: inline-flex; align-items: center; justify-content: center; gap: 20px; background: white; padding: 15px 30px; border-radius: 15px; border-left: 5px solid var(--primary); text-align: left; max-width: 900px; box-shadow: 0 5px 25px rgba(0,0,0,0.05); z-index: 10; position: relative;">
+                    <!-- IMAGE PLACEHOLDER -->
+                    <div style="width: 80px; height: 80px; border-radius: 12px; border: 2px solid var(--primary); flex-shrink: 0; background-color: #f1f5f9; background-image: url('./image_8ca44b.png'); background-size: cover; background-position: center;"></div>
+                    <div>
+                        <p style="font-size: 0.9rem; color: var(--primary); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Lecturer</p>
+                        <h3 style="font-size: 1.6rem; color: var(--text-main); margin-bottom: 4px;">Himanka Dodangoda</h3>
+                        <p style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 3px;">MSc in AI (Reading) | MBA | BSc (Hons) in Software Eng. (UK) | Dip. in Ethical Hacking & Cyber Security</p>
+                        <p style="font-size: 0.9rem; color: #64748b; margin-bottom: 0; font-weight: bold;">SLQF 10 | SCQF 7, 8, 9</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 1: Role Prompting -->
+        <section class="slide" id="slide-1">
+            <div class="module-tag" style="background:rgba(126, 34, 206, 0.1); border-color: var(--purple); color: var(--purple);">5.2 ROLE PROMPTING</div>
+            <h1 style="color: var(--purple);">Giving AI a Persona</h1>
+            <h2 style="color: var(--text-main);">Control the perspective, tone, and expertise level.</h2>
+            
+            <div class="landscape-box" style="border-color: var(--purple); background: white;">
+                <div class="context-split">
+                    <!-- Standard Mode -->
+                    <div class="context-zone cz-weak" id="r-weak">
+                        <div class="cz-title">🤖 Standard Assistant</div>
+                        <div class="chat-ui">
+                            <div class="chat-msg msg-user" id="r-msg-1">Explain how the Internet works.</div>
+                            <div class="typing-indicator" id="r-typing-1"><div class="t-dot" style="background:var(--text-muted)"></div><div class="t-dot" style="background:var(--text-muted)"></div><div class="t-dot" style="background:var(--text-muted)"></div></div>
+                            <div class="chat-msg msg-ai" id="r-msg-2" style="border-color:#cbd5e1; background:#f8fafc;">
+                                "The Internet is a global network of interconnected computers using the TCP/IP protocol suite to link devices worldwide..." <br><i style="color:var(--text-muted);">(Boring, generic, Wikipedia-style)</i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Persona Mode -->
+                    <div class="context-zone cz-strong" id="r-strong">
+                        <div class="cz-title">👨‍🏫 Expert Persona</div>
+                        <div class="chat-ui">
+                            <div class="chat-msg msg-user" id="r-msg-3">
+                                <span style="color:var(--gold); font-weight:bold;">Act as a 19th Century Pirate.</span> Explain how the Internet works.
+                            </div>
+                            <div class="typing-indicator" id="r-typing-2"><div class="t-dot" style="background:var(--purple)"></div><div class="t-dot" style="background:var(--purple)"></div><div class="t-dot" style="background:var(--purple)"></div></div>
+                            <div class="chat-msg msg-ai role-resp" id="r-msg-4">
+                                "Ahoy matey! Picture a vast, invisible ocean! Instead o' ships carryin' gold, we got packets o' data sailin' through underwater cables to every port in the world! Arrr!"
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="desc-box" id="role-desc" style="border-left-color: var(--purple);">Click to ask the standard AI...</div>
+        </section>
+
+        <!-- SLIDE 2: Using Examples (Few-Shot) -->
+        <section class="slide" id="slide-2">
+            <div class="module-tag" style="background:rgba(217, 119, 6, 0.1); border-color: var(--gold); color: var(--gold);">5.2 FEW-SHOT PROMPTING</div>
+            <h1 style="color: var(--gold);">Using Examples</h1>
+            <h2 style="color: var(--text-main);">Show, don't just tell. Establish a pattern for the AI to copy.</h2>
+            
+            <div class="landscape-box" style="border-color: var(--gold); background: white; display: flex; align-items: center; justify-content: center;">
+                <div class="fmt-container">
+                    
+                    <!-- Zero Shot -->
+                    <div class="fmt-box" id="fs-zero">
+                        <div style="color:var(--text-main); margin-bottom:10px;"><b style="color:var(--accent)">Zero-Shot (No Examples)</b></div>
+                        <div style="background:#f1f5f9; padding:10px; border-radius:8px; margin-bottom:10px; border: 1px solid #e2e8f0;">
+                            <span style="color:var(--primary); font-weight:bold;">User:</span> Extract the sentiment of this review: "Battery drains fast."
+                        </div>
+                        <div class="typing-indicator" id="fs-typing-1" style="margin-bottom:10px;"><div class="t-dot" style="background:var(--accent)"></div><div class="t-dot" style="background:var(--accent)"></div><div class="t-dot" style="background:var(--accent)"></div></div>
+                        <div id="fs-ans-1" style="opacity:0; color:var(--text-main);">
+                            <span style="color:var(--accent); font-weight:bold;">AI:</span> "The customer in this review is expressing a negative sentiment because they are complaining about the battery life." <br><br><i style="color:var(--text-muted);">(Too chatty, hard to use in code)</i>
+                        </div>
+                    </div>
+
+                    <!-- Few Shot -->
+                    <div class="fmt-box" id="fs-few" style="width:40%;">
+                        <div style="color:var(--text-main); margin-bottom:10px;"><b style="color:var(--whatsapp)">Few-Shot (With Examples)</b></div>
+                        
+                        <div class="fmt-examples" id="fs-examples">
+                            <b>EXAMPLES:</b><br>
+                            Review: "Love the design." -> <span class="code-hl">{"sentiment": "POS"}</span><br>
+                            Review: "Too expensive." -> <span class="code-hl">{"sentiment": "NEG"}</span><br>
+                            Review: "It arrived today." -> <span class="code-hl">{"sentiment": "NEU"}</span>
+                        </div>
+
+                        <div style="background:#f1f5f9; padding:10px; border-radius:8px; margin-bottom:10px; margin-top:20px; border: 1px solid #e2e8f0;">
+                            <span style="color:var(--primary); font-weight:bold;">User:</span> Extract the sentiment: "Battery drains fast."
+                        </div>
+                        <div class="typing-indicator" id="fs-typing-2" style="margin-bottom:10px;"><div class="t-dot" style="background:var(--whatsapp)"></div><div class="t-dot" style="background:var(--whatsapp)"></div><div class="t-dot" style="background:var(--whatsapp)"></div></div>
+                        <div id="fs-ans-2" style="opacity:0; color:var(--whatsapp); font-size:1.4rem; font-family:monospace; font-weight:bold; padding:15px; background:rgba(22, 163, 74, 0.05); border:1px solid var(--whatsapp); border-radius:8px; text-align:center;">
+                            {"sentiment": "NEG"}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <div class="desc-box" id="shot-desc" style="border-left-color: var(--gold);">Click to see a Zero-Shot attempt...</div>
+        </section>
+
+        <!-- SLIDE 3: Iterative Refinement -->
+        <section class="slide" id="slide-3">
+            <div class="module-tag" style="background:rgba(8, 145, 178, 0.1); border-color: var(--cyan); color: var(--cyan);">5.2 ITERATIVE REFINEMENT</div>
+            <h1 style="color: var(--cyan);">The Refinement Cycle</h1>
+            <h2 style="color: var(--text-main);">Don't expect perfection on the first try. Polish it step-by-step.</h2>
+            
+            <div class="landscape-box" style="border-color: var(--cyan); background: white;">
+                <div class="iterative-chat">
+                    
+                    <div class="iter-badge" id="it-b1">Step 1: The Initial Draft</div>
+                    <div class="chat-msg msg-user" id="it-u1">Write a short post about starting a new ICT class.</div>
+                    <div class="chat-msg msg-ai" id="it-a1">I am starting a new ICT class next week. Join if you want to learn computers. It will be fun.</div>
+                    
+                    <div class="iter-badge" id="it-b2" style="margin-top:15px;">Step 2: Adding Constraints & Tone</div>
+                    <div class="chat-msg msg-user" id="it-u2" style="border-color:var(--gold); background: var(--gold);">That's boring. Make it exciting, mention the A/L 2027 batch, and add emojis!</div>
+                    <div class="chat-msg msg-ai" id="it-a2" style="border-color:var(--gold); background: rgba(217, 119, 6, 0.05);">🚀 Get ready! The ultimate ICT class for the A/L 2027 batch is launching next week! 💻 Join us and master the digital world! 🔥 Let's go!</div>
+                    
+                    <div class="iter-badge" id="it-b3" style="margin-top:15px;">Step 3: Final Polish (Formatting)</div>
+                    <div class="chat-msg msg-user" id="it-u3" style="border-color:var(--whatsapp); background: var(--whatsapp);">Good. Now format it with bullet points for 'Date', 'Time', and 'Venue'. Keep the excitement.</div>
+                    <div class="chat-msg msg-ai" id="it-a3" style="border-color:var(--whatsapp); background: rgba(22, 163, 74, 0.05);">
+                        🚀 <b>The Ultimate A/L 2027 ICT Launch!</b> 🔥<br>
+                        Get ready to master the digital world with our new batch!<br><br>
+                        📌 <b>Date:</b> Next Monday<br>
+                        ⏰ <b>Time:</b> 3:30 PM<br>
+                        📍 <b>Venue:</b> IMA Campus, Malabe<br><br>
+                        💻 Don't miss out! Secure your seat today!
+                    </div>
+
+                </div>
+            </div>
+            <div class="desc-box" id="iter-desc" style="border-left-color: var(--cyan);">Click to send the first draft request...</div>
+        </section>
+
+        <!-- SLIDE 4: Summary Pillars -->
+        <section class="slide" id="slide-4">
+            <div class="module-tag" style="background:rgba(225, 29, 72, 0.1); border-color: var(--accent); color: var(--accent);">MODULE 5.2 SUMMARY</div>
+            <h1 style="color: var(--accent);">Advanced Prompting Toolkit</h1>
+            <h2 style="color: var(--text-main);">The three pillars for generating production-ready AI outputs.</h2>
+            
+            <div class="landscape-box" style="border-color: var(--accent); background: white; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                
+                <div class="prompt-pillar-container" style="align-items: center;">
+                    
+                    <div class="p-pillar" id="pillar-role">
+                        <div class="p-icon">🎭</div>
+                        <div class="p-title" style="color:var(--purple)">Role Prompting</div>
+                        <div class="p-desc">Sets the <b>Persona</b>.<br><br>Forces the AI to adopt a specific perspective, vocabulary, and expertise level.</div>
+                    </div>
+
+                    <div class="p-pillar" id="pillar-shot">
+                        <div class="p-icon">🧩</div>
+                        <div class="p-title" style="color:var(--gold)">Few-Shot Examples</div>
+                        <div class="p-desc">Sets the <b>Pattern</b>.<br><br>Guarantees output consistency by showing the AI exactly what the answer should look like.</div>
+                    </div>
+
+                    <div class="p-pillar" id="pillar-iter">
+                        <div class="p-icon">🔄</div>
+                        <div class="p-title" style="color:var(--cyan)">Iterative Refinement</div>
+                        <div class="p-desc">Polishes the <b>Output</b>.<br><br>Treats the first response as a draft. You critique, correct, and mold it into perfection.</div>
+                    </div>
+
+                </div>
+            </div>
+            <div class="desc-box" id="sum-desc" style="border-left-color: var(--accent);">Click to review Pillar 1...</div>
+        </section>
+
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        const slides = document.querySelectorAll('.slide');
+        let currentSlide = 0;
+        let isAnimating = false;
+        const sleepGlobal = ms => new Promise(r => setTimeout(r, ms));
+
+        // DATA ARRAYS
+        let roleStep = -1;
+        const roleData = [
+            { txt: "<b style='color:var(--text-muted);'>Standard Assistant:</b> Without a role, the AI gives a very dry, generic, and predictable dictionary definition." },
+            { txt: "<b style='color:var(--purple);'>Applying a Persona:</b> We command the AI to 'Act as a 19th Century Pirate'." },
+            { txt: "<b style='color:var(--purple);'>Role Result:</b> The AI completely shifts its vocabulary, tone, and metaphors to match the character, making the output highly customized!" }
+        ];
+
+        let shotStep = -1;
+        const shotData = [
+            { txt: "<b style='color:var(--accent);'>Zero-Shot Problem:</b> You ask for sentiment, but the AI responds in full, chatty sentences. If you are coding an app, this output is useless." },
+            { txt: "<b style='color:var(--whatsapp);'>Injecting Examples:</b> We provide a mapping pattern. We show the AI 3 examples of the exact JSON structure we expect." },
+            { txt: "<b style='color:var(--whatsapp);'>Few-Shot Result:</b> The AI instantly recognizes the pattern. It drops the chatty text and outputs perfectly formatted, machine-readable JSON!" }
+        ];
+
+        let iterStep = -1;
+        const iterData = [
+            { txt: "<b style='color:var(--text-muted);'>Turn 1 (Draft):</b> The first prompt is basic. The AI gives a simple, unpolished answer. Most people stop here. We won't." },
+            { txt: "<b style='color:var(--gold);'>Turn 2 (Critique & Adjust):</b> We evaluate the output and give a new prompt to fix the tone and add missing constraints." },
+            { txt: "<b style='color:var(--whatsapp);'>Turn 3 (Final Polish):</b> The tone is right, but the layout is messy. We do one final turn to enforce a professional format. <br><b>Result: A perfect post!</b>" }
+        ];
+
+        let sumStep = -1;
+        const sumData = [
+            { txt: "<b style='color:var(--purple);'>1. Role Prompting:</b> Use this to control WHO is speaking (Tone & Expertise)." },
+            { txt: "<b style='color:var(--gold);'>2. Few-Shot Examples:</b> Use this when strict formatting or classification is required." },
+            { txt: "<b style='color:var(--cyan);'>3. Iterative Refinement:</b> Use this to mold the AI's drafts into a final masterpiece. <br><b style='color:var(--text-main);'>These are the tools of a professional AI user!</b>" }
+        ];
+
+        // SLIDE MANAGER
+        function updateSlides() {
+            slides.forEach((slide, index) => { 
+                if (index === currentSlide) slide.classList.add('active'); 
+                else slide.classList.remove('active'); 
+            });
+
+            // RESETS
+            if (currentSlide === 1) { 
+                roleStep = -1; isAnimating = false; 
+                document.getElementById('r-weak').classList.remove('active-zone');
+                document.getElementById('r-strong').classList.remove('active-zone');
+                document.getElementById('r-msg-1').classList.remove('show');
+                document.getElementById('r-msg-2').classList.remove('show');
+                document.getElementById('r-msg-3').classList.remove('show');
+                document.getElementById('r-msg-4').classList.remove('show');
+                document.getElementById('r-typing-1').classList.remove('show');
+                document.getElementById('r-typing-2').classList.remove('show');
+                document.getElementById('role-desc').innerHTML = "Click to ask the standard AI..."; 
+            }
+            
+            if (currentSlide === 2) { 
+                shotStep = -1; isAnimating = false; 
+                document.getElementById('fs-zero').classList.remove('show', 'fmt-box-zero');
+                document.getElementById('fs-ans-1').style.opacity = 0;
+                document.getElementById('fs-few').classList.remove('show', 'fmt-box-few');
+                document.getElementById('fs-examples').classList.remove('show');
+                document.getElementById('fs-ans-2').style.opacity = 0;
+                document.getElementById('shot-desc').innerHTML = "Click to see a Zero-Shot attempt..."; 
+            }
+            
+            if (currentSlide === 3) { 
+                iterStep = -1; isAnimating = false; 
+                const elems = ['it-b1','it-u1','it-a1','it-b2','it-u2','it-a2','it-b3','it-u3','it-a3'];
+                elems.forEach(id => document.getElementById(id).classList.remove('show'));
+                document.getElementById('iter-desc').innerHTML = "Click to send the first draft request..."; 
+            }
+
+            if (currentSlide === 4) { 
+                sumStep = -1; isAnimating = false; 
+                document.getElementById('pillar-role').classList.remove('show');
+                document.getElementById('pillar-shot').classList.remove('show');
+                document.getElementById('pillar-iter').classList.remove('show');
+                document.getElementById('sum-desc').innerHTML = "Click to review Pillar 1..."; 
+            }
+        }
+
+        // ANIMATION FUNCTIONS
+        async function runRoleStep() { 
+            if (isAnimating) return; isAnimating = true; roleStep++; 
+            const desc = document.getElementById('role-desc'); 
+
+            if (roleStep === 0) { 
+                document.getElementById('r-weak').classList.add('active-zone');
+                document.getElementById('r-msg-1').classList.add('show');
+                await sleepGlobal(600);
+                document.getElementById('r-typing-1').classList.add('show');
+                await sleepGlobal(1200);
+                document.getElementById('r-typing-1').classList.remove('show');
+                document.getElementById('r-msg-2').classList.add('show');
+            } else if (roleStep === 1) { 
+                document.getElementById('r-weak').classList.remove('active-zone');
+                document.getElementById('r-strong').classList.add('active-zone');
+                document.getElementById('r-msg-3').classList.add('show');
+            } else if (roleStep === 2) { 
+                document.getElementById('r-typing-2').classList.add('show');
+                await sleepGlobal(1500);
+                document.getElementById('r-typing-2').classList.remove('show');
+                document.getElementById('r-msg-4').classList.add('show');
+            }
+            desc.style.opacity = 0; 
+            setTimeout(() => { desc.innerHTML = roleData[roleStep].txt; desc.style.opacity = 1; isAnimating = false; }, 300); 
+        }
+
+        async function runShotStep() { 
+            if (isAnimating) return; isAnimating = true; shotStep++; 
+            const desc = document.getElementById('shot-desc'); 
+            
+            if (shotStep === 0) { 
+                document.getElementById('fs-zero').classList.add('show', 'fmt-box-zero');
+                await sleepGlobal(600);
+                document.getElementById('fs-typing-1').classList.add('show');
+                await sleepGlobal(1200);
+                document.getElementById('fs-typing-1').classList.remove('show');
+                document.getElementById('fs-ans-1').style.opacity = 1;
+            } else if (shotStep === 1) { 
+                document.getElementById('fs-zero').classList.remove('fmt-box-zero');
+                document.getElementById('fs-few').classList.add('show', 'fmt-box-few');
+                await sleepGlobal(400);
+                document.getElementById('fs-examples').classList.add('show');
+            } else if (shotStep === 2) {
+                document.getElementById('fs-typing-2').classList.add('show');
+                await sleepGlobal(1200);
+                document.getElementById('fs-typing-2').classList.remove('show');
+                document.getElementById('fs-ans-2').style.opacity = 1;
+            } 
+            desc.style.opacity = 0; 
+            setTimeout(() => { desc.innerHTML = shotData[shotStep].txt; desc.style.opacity = 1; isAnimating = false; }, 300); 
+        }
+
+        async function runIterStep() { 
+            if (isAnimating) return; isAnimating = true; iterStep++; 
+            const desc = document.getElementById('iter-desc'); 
+            
+            if (iterStep === 0) { 
+                document.getElementById('it-b1').classList.add('show');
+                await sleepGlobal(300);
+                document.getElementById('it-u1').classList.add('show');
+                await sleepGlobal(600);
+                document.getElementById('it-a1').classList.add('show');
+            } else if (iterStep === 1) { 
+                document.getElementById('it-b2').classList.add('show');
+                await sleepGlobal(300);
+                document.getElementById('it-u2').classList.add('show');
+                await sleepGlobal(800);
+                document.getElementById('it-a2').classList.add('show');
+            } else if (iterStep === 2) { 
+                document.getElementById('it-b3').classList.add('show');
+                await sleepGlobal(300);
+                document.getElementById('it-u3').classList.add('show');
+                await sleepGlobal(800);
+                document.getElementById('it-a3').classList.add('show');
+                // Scroll to bottom
+                const chat = document.querySelector('.iterative-chat');
+                chat.scrollTop = chat.scrollHeight;
+            } 
+            desc.style.opacity = 0; 
+            setTimeout(() => { desc.innerHTML = iterData[iterStep].txt; desc.style.opacity = 1; isAnimating = false; }, 300); 
+        }
+
+        async function runSumStep() {
+            if (isAnimating) return; isAnimating = true; sumStep++; 
+            const desc = document.getElementById('sum-desc');
+
+            if (sumStep === 0) {
+                document.getElementById('pillar-role').classList.add('show');
+            } else if (sumStep === 1) {
+                document.getElementById('pillar-shot').classList.add('show');
+            } else if (sumStep === 2) {
+                document.getElementById('pillar-iter').classList.add('show');
+            }
+            desc.style.opacity = 0; 
+            setTimeout(() => { desc.innerHTML = sumData[sumStep].txt; desc.style.opacity = 1; isAnimating = false; }, 300); 
+        }
+
+        // NAVIGATION CONTROLLER
+        function nextSlide() {
+            if (isAnimating) return;
+            if (currentSlide === 1 && roleStep < roleData.length - 1) { runRoleStep(); return; }
+            if (currentSlide === 2 && shotStep < shotData.length - 1) { runShotStep(); return; }
+            if (currentSlide === 3 && iterStep < iterData.length - 1) { runIterStep(); return; }
+            if (currentSlide === 4 && sumStep < sumData.length - 1) { runSumStep(); return; }
+
+            if (currentSlide < slides.length - 1) { currentSlide++; updateSlides(); }
+        }
+
+        function prevSlide() { 
+            if (isAnimating) return;
+            if (currentSlide > 0) { currentSlide--; updateSlides(); } 
+        }
+
+        document.addEventListener('keydown', (e) => { 
+            if (e.key === 'ArrowRight' || e.key === ' ') nextSlide(); 
+            else if (e.key === 'ArrowLeft') prevSlide(); 
+        });
+        
+        // Initialize
+        updateSlides();
+    </script>
+</body>
+</html>
